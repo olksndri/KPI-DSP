@@ -100,6 +100,9 @@ void s_signal_deinit(s_signal *s)
 void display_peaks(float *x, float *y, 
 	const std::string plot_label, const std::string label_x, const std::string label_y, int peaks_num) 
 {
+
+	// plt::figure_size(1200, 780);
+
 	std::vector<float> x_v(x, x + peaks_num);
 	std::vector<float> y_v(y, y + peaks_num);
 
@@ -115,7 +118,9 @@ void display_peaks(float *x, float *y,
 	plt::xlabel(label_x); 
 	plt::ylabel(label_y);
 
+	// printf("showing graph\n"); 
     plt::show();
+	// printf("ended showing graph\n"); 
     // plt::close();
 }
 
@@ -283,7 +288,25 @@ s_signal signal_str;
 
 int main(int argc, char **argv)
 {
-	char sf_path[] = "data/ff-16b-2c-44100hz.wav"; 
+	// char sf_path[] = "data/ff-16b-2c-44100hz.wav"; 
+	// plt::detail::_interpreter();
+	// plt::backend("Qt5Agg"); // Або "Qt5Agg", якщо встановлено Qt
+	try {
+        plt::backend("Qt5Agg"); 
+    } catch (const std::exception& e) {
+        printf("Backend error: %s\n", e.what());
+    }
+	
+	char *sf_path; 
+	if(argc > 1)
+	{ 
+		sf_path = argv[1]; 
+	}
+	else 
+	{ 
+		perror("Please provide path to sound file to be analyzed!\n"); 
+		abort(); 
+	}		
 	
 	SNDFILE* f_sound = sf_open(sf_path, SFM_READ, &sf_info);
 

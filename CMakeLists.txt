@@ -24,6 +24,17 @@ target_include_directories(dsp_lab
 
 find_package(SndFile REQUIRED)
 # find_package(SDL2 REQUIRED CONFIG REQUIRED COMPONENTS SDL2)
+
+# set(Python3_DIR ".venv/bin/" CACHE INTERNAL "")
+# find_package(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
+# find_package(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
+
+# set(Python3_EXECUTABLE "${CMAKE_SOURCE_DIR}/.venv/bin/python")
+# find_package(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
+set(Python3_EXECUTABLE "${CMAKE_SOURCE_DIR}/.venv/bin/python")
+# Додаємо префікс, щоб CMake шукав бібліотеки саме в venv
+set(CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/.venv") 
+
 find_package(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
 
 target_link_libraries(dsp_lab PRIVATE SndFile::sndfile)
