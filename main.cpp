@@ -126,7 +126,7 @@ void display_peaks(float *x, float *y,
 
 void analyze_audio_0(float *sound_data, s_signal *signal_str) 
 { 
-	long long t0, t1; 
+	double t0, t1; 
 
 	float_to_complex(sound_data, signal_str->input_signal, signal_str->N);
 		
@@ -137,7 +137,7 @@ void analyze_audio_0(float *sound_data, s_signal *signal_str)
 		dft(signal_str->input_signal, signal_str->dft_res, signal_str->N);
 		idft(signal_str->dft_res, signal_str->idft_res, signal_str->N);
 		t1 = current_time_ms(); 
-		printf("DFT + IDFT time: %d [ms]\n", t1-t0); 
+		printf("DFT + IDFT time: %.2lf [ms]\n", t1-t0); 
 
 		log_to_file("input_signal", signal_str->input_signal, signal_str->N, COMPLEX); 
 		log_to_file("dft_res", signal_str->dft_res, signal_str->N, COMPLEX); 
@@ -148,7 +148,7 @@ void analyze_audio_0(float *sound_data, s_signal *signal_str)
 		ifft_recursive(signal_str->dft_res, signal_str->idft_res, signal_str->N);
 		ifft_recursive_scale(signal_str->idft_res, signal_str->N); 
 		t1 = current_time_ms(); 
-		printf("DFFT + IDFFT time: %d [ms]\n", t1-t0); 
+		printf("DFFT + IDFFT time: %.2lf [ms]\n", t1-t0); 
 		
 		log_to_file("dfft_recursive_res", signal_str->dft_res, signal_str->N, COMPLEX); 
 		log_to_file("idfft_recursive_res", signal_str->idft_res, signal_str->N, COMPLEX);
@@ -165,12 +165,12 @@ void analyze_audio_0(float *sound_data, s_signal *signal_str)
 		t0 = current_time_ms(); 
 		dft(signal_str->input_signal, signal_str->dft_res, signal_str->N);
 		t1 = current_time_ms(); 
-		printf("DFT time: %d [ms]\n", t1-t0); 
+		printf("DFT time: %.2lf [ms]\n", t1-t0); 
 
 		t0 = current_time_ms(); 
 		fft_recursive(signal_str->input_signal, signal_str->dft_res, signal_str->N);
 		t1 = current_time_ms(); 
-		printf("FFT time: %d [ms]\n", t1-t0); 		
+		printf("FFT time: %.2lf [ms]\n", t1-t0); 		
 	}
 
 	// Calculate magnitudes, phase shifts and power spectrum of a signal 
@@ -209,7 +209,7 @@ void analyze_audio_0(float *sound_data, s_signal *signal_str)
 // фрагментів.
 void analyze_audio_1(float *sound_data, s_signal *signal_str, int use_fft, int frame_num) 
 { 
-	long long t0, t1; 
+	double t0, t1; 
 
 	float_to_complex(sound_data, signal_str->input_signal, signal_str->N);
 
@@ -225,7 +225,9 @@ void analyze_audio_1(float *sound_data, s_signal *signal_str, int use_fft, int f
 		dft(signal_str->input_signal, signal_str->dft_res, signal_str->N);
 	t1 = current_time_ms(); 
 	
-	printf("Fourier transform time: %d [ms]\n", t1-t0); 
+	printf("t0 %.2lf [ms]\n", t0); 
+	printf("t1 %.2lf [ms]\n", t1); 
+	printf("Fourier transform time: %.2lf [ms]\n", t1-t0); 
 
 	// Calculate magnitudes of a signal 
 	calc_magnitudes(signal_str->dft_res, signal_str->magnitudes, signal_str->N); 
@@ -284,23 +286,27 @@ void log_sf_info(SF_INFO *sf_info)
 
 SF_INFO sf_info;
 
-s_signal signal_str; 
+s_signal signal; 
 
 int main(int argc, char **argv)
 {
-	// char sf_path[] = "data/ff-16b-2c-44100hz.wav"; 
-	// plt::detail::_interpreter();
-	// plt::backend("Qt5Agg"); // Або "Qt5Agg", якщо встановлено Qt
 	try {
         plt::backend("Qt5Agg"); 
     } catch (const std::exception& e) {
         printf("Backend error: %s\n", e.what());
     }
 	
-	char *sf_path; 
+	SNDFILE* f_sound; 
 	if(argc > 1)
 	{ 
-		sf_path = argv[1]; 
+ 		f_sound = sf_open(argv[1], SFM_READ, &sf_info);
+		
+		if(f_sound == NULL) 
+		{ 
+			perror("Error occured while opening file: "); 
+			printf("%s\n", argv[1]);
+			abort(); 
+		}
 	}
 	else 
 	{ 
@@ -308,22 +314,20 @@ int main(int argc, char **argv)
 		abort(); 
 	}		
 	
-	SNDFILE* f_sound = sf_open(sf_path, SFM_READ, &sf_info);
 
 	log_sf_info(&sf_info); 
+	int total_samples = sf_info.frames * sf_info.channels; 
 
-	int16_t *sound_data = (int16_t*)malloc_nc(sf_info.frames*sf_info.channels * sizeof(int16_t)); 
-	// int16_t *sound_data_ch0 = (int16_t*)malloc_nc(sf_info.frames*sf_info.channels/2 * sizeof(int16_t)); 
+	int16_t *sound_data = (int16_t*)malloc_nc(total_samples * sizeof(int16_t)); 
 	int16_t *sound_data_ch0 = (int16_t*)malloc_nc(sf_info.frames * sizeof(int16_t)); 
-	// int16_t *sound_data_ch1 = (int16_t*)malloc_nc(sf_info.frames * sizeof(int16_t)); 
 	float *sound_data_ch0_fl = (float*)malloc_nc(sf_info.frames * sizeof(float)); 
 
 	sf_read_short(f_sound, (int16_t*)sound_data, sf_info.frames*sf_info.channels);
 
-	for(int i = 0, k = 0; i < sf_info.frames; k++, i += sf_info.channels)
+	for(int i = 0, k = 0; i < total_samples; k++, i += sf_info.channels)
 		sound_data_ch0[k] = sound_data[i];
 
-	for(int i = 0; i < sf_info.frames/sf_info.channels; i++)
+	for(int i = 0; i < sf_info.frames; i++)
 		sound_data_ch0_fl[i] = (float)sound_data_ch0[i] / INT16_MAX; 
 
 
@@ -345,16 +349,14 @@ int main(int argc, char **argv)
 	printf("Number of DFT points: %d\n", N);  
 	printf("Used window: %s\n", (win_flag) ? "HANN_WINDOW" :"NO_WINDOW"); 
 
-	// s_signal_init(&signal_str, N, sample_rate, HANN_WINDOW); 
-	s_signal_init(&signal_str, N, sample_rate, (win_flag) ? HANN_WINDOW : NO_WINDOW); 
+	s_signal_init(&signal, N, sample_rate, (win_flag) ? HANN_WINDOW : NO_WINDOW); 
 	int frames_to_process = sf_info.frames / N; 
 	for(int i = 0; i < frames_to_process; i++)
 	{ 
-		// analyze_audio_0(sound_data_ch0_fl, &signal_str); 
-		analyze_audio_1(&sound_data_ch0_fl[N*i], &signal_str, use_fft, i);  
+		analyze_audio_1(&sound_data_ch0_fl[N*i], &signal, use_fft, i);  
 	}
 
-	s_signal_deinit(&signal_str); 
+	s_signal_deinit(&signal); 
 
 	free_nc(sound_data_ch0_fl); 
 	free_nc(sound_data_ch0); 

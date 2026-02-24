@@ -2,5 +2,6 @@
 
 #include <time.h> 
 #include <stdio.h> 
+#include <stdint.h> 
  
-long long current_time_ms(); 
+double current_time_ms(); 
