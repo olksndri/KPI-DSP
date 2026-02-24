@@ -1,10 +1,7 @@
 #include "timeops.h"
 
-double current_time_ms() 
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    double s = ((float)ts.tv_sec) * 1000.0f; 
-    double ms = ((float)ts.tv_nsec) / 1000000.0f; 
-    return s + ms;
+double current_time_ms() {
+    auto now = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch());
+    return (double)duration.count() / 1000.0;
 }

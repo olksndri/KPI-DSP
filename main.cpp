@@ -225,8 +225,6 @@ void analyze_audio_1(float *sound_data, s_signal *signal_str, int use_fft, int f
 		dft(signal_str->input_signal, signal_str->dft_res, signal_str->N);
 	t1 = current_time_ms(); 
 	
-	printf("t0 %.2lf [ms]\n", t0); 
-	printf("t1 %.2lf [ms]\n", t1); 
 	printf("Fourier transform time: %.2lf [ms]\n", t1-t0); 
 
 	// Calculate magnitudes of a signal 
