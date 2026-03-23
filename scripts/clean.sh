@@ -1,5 +1,4 @@
 #!/bin/bash
 
-# rm -build/* 
-cmake --build build --target clean
-
+rm -r build
+# cmake --build build --target clean

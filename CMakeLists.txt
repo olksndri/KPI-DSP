@@ -14,29 +14,22 @@ add_executable(dsp_lab
 )
 
 
-target_include_directories(dsp_lab 
-    PUBLIC 
+target_include_directories(dsp_lab
+    PUBLIC
     dsp
     libs
     math
     utils
-) 
+)
 
-find_package(SndFile REQUIRED)
-# find_package(SDL2 REQUIRED CONFIG REQUIRED COMPONENTS SDL2)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
 
-# set(Python3_DIR ".venv/bin/" CACHE INTERNAL "")
-# find_package(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
-# find_package(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
-
-# set(Python3_EXECUTABLE "${CMAKE_SOURCE_DIR}/.venv/bin/python")
-# find_package(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
 set(Python3_EXECUTABLE "${CMAKE_SOURCE_DIR}/.venv/bin/python")
 # Додаємо префікс, щоб CMake шукав бібліотеки саме в venv
-set(CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/.venv") 
+set(CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/.venv")
 
 find_package(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
 
-target_link_libraries(dsp_lab PRIVATE SndFile::sndfile)
-# target_link_libraries(dsp_lab PRIVATE SDL2::SDL2)
+target_link_libraries(dsp_lab PRIVATE PkgConfig::SNDFILE)
 target_link_libraries(dsp_lab PRIVATE Python3::Python Python3::NumPy)

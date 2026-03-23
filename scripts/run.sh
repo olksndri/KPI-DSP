@@ -1,6 +1,3 @@
-export PYTHONPATH="${PWD}/.venv/lib/python3.13/site-packages"
+export PYTHONPATH=.venv/lib/python3.12/site-packages
 
-# ./build/dsp_lab data/file_example_WAV_2MG.wav
-./build/dsp_lab $1 
-
-
+./build/dsp_lab $1
