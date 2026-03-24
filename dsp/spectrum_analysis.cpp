@@ -20,14 +20,31 @@ void calc_phase_shifts(complex *dft_res, float *shifts, int N)
 	}
 }
 
+// void calc_power_spectrum(complex *dft_res, float *power_spectrum, int N)
+// {
+// 	for(int m = 0; m < N; m++)
+// 	{
+// 		complex v = dft_res[m];
+// 		float power = v.real*v.real + v.imag*v.imag;
+// 		power_spectrum[m] = power;
+// 	}
+// }
+
 void calc_power_spectrum(complex *dft_res, float *power_spectrum, int N)
 {
-	for(int m = 0; m < N; m++)
-	{
-		complex v = dft_res[m];
-		float power = v.real*v.real + v.imag*v.imag;
-		power_spectrum[m] = power;
-	}
+    // Real signal has unique frequencies up to N / 2
+	// Above the N / 2 frequencies are "mirrored"
+	int K = N / 2 + 1;
+
+    for(int k = 0; k < K; k++)
+    {
+        complex v = dft_res[k];
+
+        float mag_sq = v.real*v.real + v.imag*v.imag;
+
+        // Normalization by N (optional)
+        power_spectrum[k] = mag_sq / (float)N;
+    }
 }
 
 void calc_bin_frequencies(float *frequencies, int Fs, int N)

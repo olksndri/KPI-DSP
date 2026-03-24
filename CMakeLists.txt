@@ -31,5 +31,8 @@ set(CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/.venv")
 
 find_package(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
 
+find_package(SDL2 REQUIRED)
+target_link_libraries(dsp_lab PRIVATE SDL2::SDL2 SDL2::SDL2main)
+
 target_link_libraries(dsp_lab PRIVATE PkgConfig::SNDFILE)
 target_link_libraries(dsp_lab PRIVATE Python3::Python Python3::NumPy)

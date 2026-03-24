@@ -3,6 +3,9 @@
 #include <sndfile.h>
 #include <time.h>
 #include <sstream>
+#include <chrono>
+#include <iostream>
+#include <thread>
 #include <iomanip>
 
 #include "math/complex_math.h"
@@ -10,7 +13,8 @@
 #include "dsp/fourier_transform.h"
 #include "dsp/spectrum_analysis.h"
 #include "dsp/window_funcs.h"
-#include "dsp/filtering.h"
+#include "dsp/mel_filterbank.h"
+#include "dsp/dct.h"
 
 #include "libs/matplotlibcpp.h"
 
@@ -33,6 +37,8 @@ typedef struct s_signal
 {
 	int N; 					// Number of DFT / IDFT points
 
+	int M; 					// Number of mel filterbank filters
+
 	int Fs; 				// Sample rate
 
 	WINDOW_T window; 	// Type of window to apply
@@ -54,11 +60,15 @@ typedef struct s_signal
 
 	float *frequencies;		// Pointer to calculated frequencies
 
+	float *mel_energies;	// Pointer to calculated mel energies
+
 } s_signal;
 
-void s_signal_init(s_signal *s, int N, int sample_rate, WINDOW_T win)
+void s_signal_init(s_signal *s, int N, int M, int sample_rate, WINDOW_T win)
 {
 	s->N = N;
+
+	s->M = M;
 
 	s->Fs = sample_rate;
 
@@ -79,6 +89,8 @@ void s_signal_init(s_signal *s, int N, int sample_rate, WINDOW_T win)
 	s->amplitudes = (float*)malloc_nc(N * sizeof(float));
 
 	s->frequencies = (float*)malloc_nc(N * sizeof(float));
+
+	s->mel_energies = (float*)malloc_nc(M * sizeof(float));
 }
 
 void s_signal_deinit(s_signal *s)
@@ -98,6 +110,8 @@ void s_signal_deinit(s_signal *s)
 	free_nc(s->amplitudes);
 
 	free_nc(s->frequencies);
+
+	free_nc(s->mel_energies);
 }
 
 void display_peaks(float *x, float *y,
@@ -268,6 +282,56 @@ void analyze_audio_1(float *sound_data, s_signal *signal_str, int use_fft, int f
 	display_peaks(signal_str->frequencies, signal_str->amplitudes, plot_title, "Frequency", "Amplitude", display_points);
 }
 
+void plot_mfcc_gnuplot(float* mfcc_matrix, int frames, int M) {
+    FILE *gp = popen("gnuplot -persistent", "w");
+    fprintf(gp, "set view map\n");
+    fprintf(gp, "set term qt size 800,400\n");
+    fprintf(gp, "splot '-' matrix with image\n");
+
+    for (int m = 0; m < M; m++) {
+        for (int f = 0; f < frames; f++) {
+            fprintf(gp, "%f ", mfcc_matrix[f * M + m]);
+        }
+        fprintf(gp, "\n");
+    }
+    fprintf(gp, "e\ne\n");
+    pclose(gp);
+}
+
+FILE *gp;
+
+void plot_current_mfcc(float* mfcc, int M, int frame_idx) {
+    gp = popen("gnuplot", "w");
+    if (!gp) return;
+
+    fprintf(gp, "set title 'MFCC Frame: %d'\n", frame_idx);
+    fprintf(gp, "set ylabel 'Value (dB/Amplitude)'\n");
+    fprintf(gp, "set xlabel 'Coefficient Index'\n");
+
+    fprintf(gp, "set style fill solid 1.0 border -1\n");
+    fprintf(gp, "set boxwidth 0.8\n");
+    fprintf(gp, "set grid y\n");
+
+    fprintf(gp, "set autoscale y\n");
+    fprintf(gp, "set autoscale x\n");
+
+    fprintf(gp, "plot '-' with boxes title 'MFCC Coefficients'\n");
+
+    for (int m = 0; m < M; m++) {
+        fprintf(gp, "%d %f\n", m, mfcc[m]);
+    }
+
+    fprintf(gp, "e\n");
+    fflush(gp);
+
+    // pclose(gp);
+}
+
+void wait_for_1_key() {
+    int x = 0;
+    while (x != 1)
+        std::cin >> x;
+}
 
 // LAB 2
 // Розробка програмного забезпечення для розрахунку
@@ -276,20 +340,23 @@ void analyze_audio_1(float *sound_data, s_signal *signal_str, int use_fft, int f
 // Завдання:
 // розробити програмне забезпечення для розрахунку мел-кепстральних коефіцієнтів
 // стаціонарних фрагментів голосового сигналу.
-void calc_mfcc(float *sound_data, float *scrath, s_signal *signal_str, int frames)
+void calc_mfcc(float *sound_data, float *mel_filterbank, float *scratch, s_signal *signal_str, int samples)
 {
     // Next steps need to be followed to calculate MFCCs:
 
     // 1. Pre-emphasize the signal: Amplify higher frequencies to balance the spectrum.
     float alpha = 0.96; // filter coefficient
-    pre_emphasis_filter(scrath, sound_data, signal_str->N, alpha);
+    pre_emphasis_filter(scratch, sound_data, samples, alpha);
 
+    float *mfcc = (float *)malloc_nc(signal_str->M * sizeof(float));
+
+    int frame_count = 0;
 
     // 2. Framing: Break the signal into small, overlapping frames.
-    int stride = N / 2; // 50% overlap
-   	for(int i = 0; i < frames-stride; i += stride)
+    int stride = signal_str->N / 2; // 50% overlap
+    for(int i = 0; i <= samples - signal_str->N; i += stride)
     {
-        float *cur_frame = sound_data + i;
+        float *cur_frame = scratch + i;
 
         float_to_complex(cur_frame, signal_str->input_signal, signal_str->N);
 
@@ -299,19 +366,28 @@ void calc_mfcc(float *sound_data, float *scrath, s_signal *signal_str, int frame
        	// 4. FFT: Convert each frame from the time domain to the frequency domain.
         fft_recursive(signal_str->input_signal, signal_str->dft_res, signal_str->N);
 
+        // 5. Mel-filterbank: Apply overlapping triangular filters spaced according to the Mel-scale on signals power spectrum.
+        calc_power_spectrum(signal_str->dft_res, signal_str->power_spectrum, signal_str->N);
 
+        apply_mel_filterbank(signal_str->mel_energies, signal_str->power_spectrum, mel_filterbank, signal_str->M, signal_str->N);
+
+        // 6. Logarithm: To replicate the way a human ear reacts to sound strength take the logarithm of the filterbank outputs.
+        for(int m = 0; m < signal_str->M; m++) // Convert mel energies into dB
+            signal_str->mel_energies[m] = 10 * log10f(signal_str->mel_energies[m] + 1e-10);
+
+        // 7. DCT: Apply the DCT to the log Mel-spectrum to obtain the Mel-frequency Cepstral Coefficients.
+        dct_1d(mfcc, signal_str->mel_energies, signal_str->M);
+
+        // 8. Візуалізація в GNUplot (малюємо поточний dct_res)
+        plot_current_mfcc(mfcc, signal_str->M, frame_count);
+
+        // 9. Пауза до натискання S (використовуємо SDL_Event)
+        wait_for_1_key();
+        pclose(gp);
+        frame_count++;
     }
 
-
-
-
-
-
-
-
-    // 5. Mel-filterbank: Apply overlapping triangular filters spaced according to the Mel-scale.
-    // 6. Logarithm: To replicate the way a human ear reacts to sound strength take the logarithm of the filterbank outputs.
-    // 7. DCT: Apply the DCT to the log Mel-spectrum to obtain the Mel-frequency Cepstral Coefficients.
+    free_nc(mfcc);
 }
 
 
@@ -370,7 +446,7 @@ int main(int argc, char **argv)
 	int16_t *sound_data = (int16_t*)malloc_nc(total_samples * sizeof(int16_t));
 	int16_t *sound_data_ch0 = (int16_t*)malloc_nc(sf_info.frames * sizeof(int16_t));
 	float *sound_data_ch0_fl = (float*)malloc_nc(sf_info.frames * sizeof(float));
-	float *scrath = (float*)malloc_nc(sf_info.frames * sizeof(float));
+	float *scratch = (float*)malloc_nc(sf_info.frames * sizeof(float));
 
 	sf_read_short(f_sound, (int16_t*)sound_data, sf_info.frames*sf_info.channels);
 
@@ -383,6 +459,7 @@ int main(int argc, char **argv)
 
 	int sample_rate = sf_info.samplerate;
 	int N = 0;
+	int M = 0;
 
 
 	if(lab == 1)
@@ -403,7 +480,7 @@ int main(int argc, char **argv)
     	printf("Number of DFT points: %d\n", N);
     	printf("Used window: %s\n", (win_flag) ? "HANN_WINDOW" :"NO_WINDOW");
 
-    	s_signal_init(&signal, N, sample_rate, (win_flag) ? HANN_WINDOW : NO_WINDOW);
+    	s_signal_init(&signal, N, M, sample_rate, (win_flag) ? HANN_WINDOW : NO_WINDOW);
     	int frames_to_process = sf_info.frames / N;
     	for(int i = 0; i < frames_to_process; i++)
     	{
@@ -414,13 +491,60 @@ int main(int argc, char **argv)
 	}
 	else if (lab == 2)
 	{
-	    N = 512;
+// #define WIDTH   800
+// #define HEIGHT  400
 
-		s_signal_init(&signal, N, sample_rate, HANN_WINDOW);
+//     	SDL_Window* window = NULL;
+//         SDL_Renderer* renderer = NULL;
 
-	    calc_mfcc(sound_data_ch0_fl, scrath, &signal, sf_info.frames);
+//         // 1. Initialize SDL with video subsystem
+//         if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+//             fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
+//             return 1;
+//         }
+
+//         // 2. Create an SDL window
+//         window = SDL_CreateWindow("SDL2 Renderer Init",
+//                                 SDL_WINDOWPOS_UNDEFINED,
+//                                 SDL_WINDOWPOS_UNDEFINED,
+//                                 WIDTH,
+//                                 HEIGHT,
+//                                 0); // No special window flags
+//         if (!window) {
+//             fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
+//             SDL_Quit();
+//             return 1;
+//         }
+
+//         // 3. Create the SDL renderer
+//         renderer = SDL_CreateRenderer(window,
+//                                     -1, // Index of the rendering driver, -1 for the first one supporting the flags
+//                                     SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC); // Use hardware acceleration and vsync
+//         if (!renderer) {
+//             fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError());
+//             SDL_DestroyWindow(window);
+//             SDL_Quit();
+//             return 1;
+//         }
+
+	    N = 512; // FFT points
+	    M = 40; // filters number
+		int Fs = sample_rate;
+
+		s_signal_init(&signal, N, M, sample_rate, HANN_WINDOW);
+
+        float* mel_filterbank = create_mel_filterbank(Fs, N, M);
+
+	    calc_mfcc(sound_data_ch0_fl, mel_filterbank, scratch, &signal, sf_info.frames);
+
+		destroy_mel_filterbank(mel_filterbank);
 
 		s_signal_deinit(&signal);
+
+  //        // Clean up resources
+  //       SDL_DestroyRenderer(renderer);
+  //       SDL_DestroyWindow(window);
+  //       SDL_Quit();
 	}
 	else
 	{
@@ -429,7 +553,7 @@ int main(int argc, char **argv)
 		exit(-1);
 	}
 
-	free_nc(scrath);
+	free_nc(scratch);
 	free_nc(sound_data_ch0_fl);
 	free_nc(sound_data_ch0);
 	free_nc(sound_data);

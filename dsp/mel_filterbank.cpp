@@ -1,4 +1,5 @@
-#include "filtering.h"
+#include "mel_filterbank.h"
+#include <cstdio>
 #include <cstdlib>
 
 /* Pre-emphasis is a high-pass filter that boosts the energy in higher frequencies.
@@ -11,7 +12,7 @@
  * N - inout length;
  * alpha - filter coefficient. Typical value is in range 0.95...0.97.
  */
-void pre_emphasis_filter(float *filt_out, float *filt_inp, int N, int alpha)
+void pre_emphasis_filter(float *filt_out, float *filt_inp, int N, float alpha)
 {
     filt_out[0] = filt_inp[0];
 
@@ -52,12 +53,11 @@ void hz_to_fft_bins(int *bins, float *freqs, int Fs, int freqs_num, int N)
         bins[i] = ((N + 1.0f) * freqs[i]) / Fs;
 }
 
-
 // Fs - sammpling rate
 // N - number of FFT points
 // M - desired number of filters, typically
 //   M = 40, for audio processing
-void create_mel_filterbank(int Fs, int N, int M)
+float* create_mel_filterbank(int Fs, int N, int M)
 {
     // Usable fourier transform bins
     // In real signal all frequencies above N/2 are aliased ("mirrored")
@@ -73,11 +73,11 @@ void create_mel_filterbank(int Fs, int N, int M)
 
     // Create equally spaced points in the mel scale
     float mel_points_num = M + 2;
-    float mel_step = mel_max / mel_points_num;
+    float mel_step = (mel_max - mel_min) / (M + 1);
 
     float *mel_points   = (float*)malloc_nc(mel_points_num * sizeof(float));
     float *freq_points  = (float*)malloc_nc(mel_points_num * sizeof(float));
-    float *ft_bins      = (float*)malloc_nc(mel_points_num * sizeof(float));
+    int *ft_bin_indices = (int*)malloc_nc(mel_points_num * sizeof(int));
 
     for(int i = 0; i < mel_points_num; i++)
         mel_points[i] = i * mel_step;
@@ -87,42 +87,77 @@ void create_mel_filterbank(int Fs, int N, int M)
 
     // Calculate corresponding fourier transform bins
     for(int i = 0; i < mel_points_num; i++)
-        ft_bins[i] = ((N + 1.0f) * freq_points[i]) / Fs;
+        ft_bin_indices[i] = (N * freq_points[i]) / Fs;
 
     // Generate triangular filters based on these points
     int filterbank_size = M * K;
 
     float *mel_filterbank = (float*)malloc_nc(filterbank_size * sizeof(float));
 
-
-    int idx = 0;
-    // Iterate through bins
-    for(int k = 0; k < K; k++)
+    for(int m = 0; m < M; m++)  // Iterate through filters
     {
-        // Iterate through filters
-        for(int m = 0; m < M; m++)
+        int f_left      = ft_bin_indices[m];
+        int f_center    = ft_bin_indices[m+1];
+        int f_right     = ft_bin_indices[m+2];
+
+        for(int k = 0; k < K; k++) // Iterate through bins
         {
+            int idx = m * K + k;
+
             float val;
 
-            if(k < freq_points[])
+            if(k < f_left)
             {
-
+                val = 0.0f;
             }
-            else if()
+            else if(f_left <= k && k <= f_center)
             {
-
+                if(f_center == f_left)
+                    val = 1; // signal doesn't have slope -> rises immediately
+                else
+                    val = ((float)(k - f_left)) / (f_center - f_left);
             }
-            else if()
+            else if(f_center <= k && k <= f_right)
             {
-
+                if(f_center == f_right)
+                    val = 0; // signal doesn't have slope -> falls immediately
+                else
+                    val = ((float)(f_right - k)) / (f_right - f_center);
             }
-            else if()
+            else if(k > f_right)
             {
-
+                val = 0.0f;
             }
 
             mel_filterbank[idx] = val;
-
         }
+    }
+
+    free_nc(ft_bin_indices);
+    free_nc(freq_points);
+    free_nc(mel_points);
+
+    return mel_filterbank;
+}
+
+void destroy_mel_filterbank(float* mel_filterbank)
+{
+    free_nc(mel_filterbank);
+}
+
+void apply_mel_filterbank(float *mel_energies, float *power_spectrum, float *mel_filterbank, int M, int N)
+{
+    int K = N / 2 + 1;
+
+    for(int m = 0; m < M; m++)
+    {
+        float Em = 0.0f;
+
+        for(int k = 0; k < K; k++)
+        {
+            Em += power_spectrum[k] * mel_filterbank[m * K + k];
+        }
+
+        mel_energies[m] = Em;
     }
 }
