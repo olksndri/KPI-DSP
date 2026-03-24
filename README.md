@@ -1,6 +1,17 @@
-# KPI-DSP-lab 1  
+# KPI-DSP-labs
 
-Digital Signal Processing laboratory assignments for KPI. This project implements Fast Fourier Transform (FFT), windowing functions, and spectral visualization for audio signals.
+Switching between labs done by changing variable in main.cpp: 
+
+```C++
+int lab = 1;
+```
+
+## KPI-DSP-lab 1 
+This project branch implements Fast Fourier Transform (FFT), windowing functions, and spectral visualization for audio signals.
+
+## KPI-DSP-lab 2  
+This project branch implements software for calculation and visualization the mel-frequency cepstral coefficients of an audio signal.
+
 
 ## System Requirements
 
