@@ -282,22 +282,6 @@ void analyze_audio_1(float *sound_data, s_signal *signal_str, int use_fft, int f
 	display_peaks(signal_str->frequencies, signal_str->amplitudes, plot_title, "Frequency", "Amplitude", display_points);
 }
 
-void plot_mfcc_gnuplot(float* mfcc_matrix, int frames, int M) {
-    FILE *gp = popen("gnuplot -persistent", "w");
-    fprintf(gp, "set view map\n");
-    fprintf(gp, "set term qt size 800,400\n");
-    fprintf(gp, "splot '-' matrix with image\n");
-
-    for (int m = 0; m < M; m++) {
-        for (int f = 0; f < frames; f++) {
-            fprintf(gp, "%f ", mfcc_matrix[f * M + m]);
-        }
-        fprintf(gp, "\n");
-    }
-    fprintf(gp, "e\ne\n");
-    pclose(gp);
-}
-
 FILE *gp;
 
 void plot_current_mfcc(float* mfcc, int M, int frame_idx) {
@@ -378,10 +362,10 @@ void calc_mfcc(float *sound_data, float *mel_filterbank, float *scratch, s_signa
         // 7. DCT: Apply the DCT to the log Mel-spectrum to obtain the Mel-frequency Cepstral Coefficients.
         dct_1d(mfcc, signal_str->mel_energies, signal_str->M);
 
-        // 8. Візуалізація в GNUplot (малюємо поточний dct_res)
+        // 8. Visualize current frame MFCC using GNUplot
         plot_current_mfcc(mfcc, signal_str->M, frame_count);
 
-        // 9. Пауза до натискання S (використовуємо SDL_Event)
+        // 9. Pause until user enters "1" in console
         wait_for_1_key();
         pclose(gp);
         frame_count++;
@@ -491,43 +475,7 @@ int main(int argc, char **argv)
 	}
 	else if (lab == 2)
 	{
-// #define WIDTH   800
-// #define HEIGHT  400
-
-//     	SDL_Window* window = NULL;
-//         SDL_Renderer* renderer = NULL;
-
-//         // 1. Initialize SDL with video subsystem
-//         if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-//             fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
-//             return 1;
-//         }
-
-//         // 2. Create an SDL window
-//         window = SDL_CreateWindow("SDL2 Renderer Init",
-//                                 SDL_WINDOWPOS_UNDEFINED,
-//                                 SDL_WINDOWPOS_UNDEFINED,
-//                                 WIDTH,
-//                                 HEIGHT,
-//                                 0); // No special window flags
-//         if (!window) {
-//             fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
-//             SDL_Quit();
-//             return 1;
-//         }
-
-//         // 3. Create the SDL renderer
-//         renderer = SDL_CreateRenderer(window,
-//                                     -1, // Index of the rendering driver, -1 for the first one supporting the flags
-//                                     SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC); // Use hardware acceleration and vsync
-//         if (!renderer) {
-//             fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError());
-//             SDL_DestroyWindow(window);
-//             SDL_Quit();
-//             return 1;
-//         }
-
-	    N = 512; // FFT points
+	    N = 1024; // FFT pointsя
 	    M = 40; // filters number
 		int Fs = sample_rate;
 
@@ -540,11 +488,6 @@ int main(int argc, char **argv)
 		destroy_mel_filterbank(mel_filterbank);
 
 		s_signal_deinit(&signal);
-
-  //        // Clean up resources
-  //       SDL_DestroyRenderer(renderer);
-  //       SDL_DestroyWindow(window);
-  //       SDL_Quit();
 	}
 	else
 	{
