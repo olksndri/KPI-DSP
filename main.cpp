@@ -424,7 +424,7 @@ void vad(float *sound_data, float *mel_filterbank, float *scratch, s_signal *sig
     int currentSample = 0;
     float elapsedSeconds = 0.0f;
 
-    const int thresh_dB = 8.0f;
+    const int thresh_dB = 10.0f;
 
     int not_voice_cnt = 0;
 
@@ -454,16 +454,18 @@ void vad(float *sound_data, float *mel_filterbank, float *scratch, s_signal *sig
 
                 dct_1d(mfcc, signal_str->mel_energies, signal_str->M);
 
-                // --- VAD LOGIC --- //
+                // --- VAD logic --- //
                 float energy = mfcc[0];
 
-                energy = ema(energy_prev, energy, 0.5);
+                // Exponential moving average smoothing
+                energy = ema(energy_prev, energy, 0.45);
                 is_voice = (energy > (energy_noise + thresh_dB)) ? 1 : 0;
                 energy_prev = energy;
 
-                if(!is_voice)
-                	energy_noise = energy;
+                inferences[infer_cnt] = is_voice;
+                infer_cnt++;
 
+                // Dynamic noise floor tracking
                 int is_noise_sequence = 1;
                 for(int i = 0; i < INFERENCES_SIZE; i++)
                 {
@@ -474,13 +476,13 @@ void vad(float *sound_data, float *mel_filterbank, float *scratch, s_signal *sig
                  	}
                 }
 
-                inferences[infer_cnt] = is_voice;
-                infer_cnt++;
+                if(is_noise_sequence)
+                	energy_noise = energy;
 
                 if(infer_cnt == INFERENCES_SIZE)
                		infer_cnt = 0;
 
-                // --- VISUALIZATION ---
+                // --- Visualization ---
                 memmove(rawHistory, &rawHistory[1], (SCREEN_WIDTH - 1) * sizeof(float));
                 memmove(procHistory, &procHistory[1], (SCREEN_WIDTH - 1) * sizeof(float));
 
@@ -493,7 +495,7 @@ void vad(float *sound_data, float *mel_filterbank, float *scratch, s_signal *sig
             }
         }
 
-        // --- DRAWING ---
+        // --- Drawing ---
         BeginDrawing();
             ClearBackground(BLACK);
 
