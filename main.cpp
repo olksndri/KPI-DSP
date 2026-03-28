@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sndfile.h>
@@ -30,8 +31,19 @@ namespace plt = matplotlibcpp;
 int use_logs = 0;
 int use_time_profile = 0;
 
-int lab = 2;
+int lab = 3;
 
+
+#include "raylib.h"
+#include <string.h>
+#include <stdint.h>
+
+#define SCREEN_WIDTH 800
+#define SCREEN_HEIGHT 600
+#define HISTORY_SIZE SCREEN_WIDTH
+
+float rawHistory[HISTORY_SIZE] = { 0 };
+float procHistory[HISTORY_SIZE] = { 0 };
 
 typedef struct s_signal
 {
@@ -284,10 +296,8 @@ void analyze_audio_1(float *sound_data, s_signal *signal_str, int use_fft, int f
 
 FILE *gp;
 
-void plot_current_mfcc(float* mfcc, int M, int frame_idx) {
-    gp = popen("gnuplot", "w");
-    if (!gp) return;
-
+void plot_current_mfcc(float* mfcc, int M, int frame_idx)
+{
     fprintf(gp, "set title 'MFCC Frame: %d'\n", frame_idx);
     fprintf(gp, "set ylabel 'Value (dB/Amplitude)'\n");
     fprintf(gp, "set xlabel 'Coefficient Index'\n");
@@ -363,6 +373,8 @@ void calc_mfcc(float *sound_data, float *mel_filterbank, float *scratch, s_signa
         dct_1d(mfcc, signal_str->mel_energies, signal_str->M);
 
         // 8. Visualize current frame MFCC using GNUplot
+        gp = popen("gnuplot", "w");
+        if (!gp) return;
         plot_current_mfcc(mfcc, signal_str->M, frame_count);
 
         // 9. Pause until user enters "1" in console
@@ -374,6 +386,107 @@ void calc_mfcc(float *sound_data, float *mel_filterbank, float *scratch, s_signa
     free_nc(mfcc);
 }
 
+
+// Exponential moving average filter
+float ema(float yn_prev, float xn, float alpha)
+{
+	float yn = (1 - alpha) * yn_prev + alpha * xn;
+
+	return yn;
+}
+
+// // LAB 3
+// // Розробка програмного забезпечення для визначення меж
+// // окремих слів в голосовому сигналі.
+
+// // Завдання:
+// // розробити програмне забезпечення для визначення часових кордонів пауз та
+void vad(float *sound_data, float *mel_filterbank, float *scratch, s_signal *signal_str,
+         int samples, Wave &wave, Sound &sound, float *rawHistory, float *procHistory)
+{
+    float pre_emphasis_alpha = 0.96;
+    pre_emphasis_filter(scratch, sound_data, samples, pre_emphasis_alpha);
+
+    float *mfcc = (float *)malloc_nc(signal_str->M * sizeof(float));
+    int frame_count = 0;
+    float energy_prev = 0.0f;
+    float energy_noise = 0.0f;
+    const int WINDOW_SIZE = signal_str->N;
+
+    int is_voice = 0;
+    int currentSample = 0;
+    float elapsedSeconds = 0.0f;
+
+    memset(rawHistory, 0, sizeof(float) * SCREEN_WIDTH);
+    memset(procHistory, 0, sizeof(float) * SCREEN_WIDTH);
+
+    while (!WindowShouldClose()) {
+        if (IsSoundPlaying(sound)) {
+            elapsedSeconds += GetFrameTime();
+            long targetSample = (long)(elapsedSeconds * wave.sampleRate);
+
+            while (currentSample + WINDOW_SIZE < targetSample &&
+                   currentSample + WINDOW_SIZE < samples)
+            {
+            	float* current_window = &sound_data[currentSample];
+                float* current_window_filtered = &scratch[currentSample];
+
+                // --- MFFC --- //
+                float_to_complex(current_window_filtered, signal_str->input_signal, signal_str->N);
+                hann_window_complex(signal_str->input_signal, signal_str->input_signal, signal_str->N);
+                fft_recursive(signal_str->input_signal, signal_str->dft_res, signal_str->N);
+                calc_power_spectrum(signal_str->dft_res, signal_str->power_spectrum, signal_str->N);
+                apply_mel_filterbank(signal_str->mel_energies, signal_str->power_spectrum, mel_filterbank, signal_str->M, signal_str->N);
+
+                for(int m = 0; m < signal_str->M; m++)
+                    signal_str->mel_energies[m] = 10 * log10f(signal_str->mel_energies[m] + 1e-10);
+
+                dct_1d(mfcc, signal_str->mel_energies, signal_str->M);
+
+                // --- VAD LOGIC --- //
+                float energy = mfcc[0];
+                if(frame_count < 5) {
+                    energy_noise = ema(energy_prev, energy, 0.45);
+                    energy_prev = energy_noise;
+                } else {
+                    energy = ema(energy_prev, energy, 0.85);
+                    is_voice = (energy > (energy_noise)) ? 1 : 0;
+                    energy_prev = energy;
+                }
+                frame_count++;
+
+                // --- VISUALIZATION ---
+                memmove(rawHistory, &rawHistory[1], (SCREEN_WIDTH - 1) * sizeof(float));
+                memmove(procHistory, &procHistory[1], (SCREEN_WIDTH - 1) * sizeof(float));
+
+                rawHistory[SCREEN_WIDTH - 1] = current_window[0];
+                procHistory[SCREEN_WIDTH - 1] = is_voice ? 0.8f : 0.0f;
+
+                currentSample += WINDOW_SIZE;
+            }
+        }
+
+        // --- DRAWING ---
+        BeginDrawing();
+            ClearBackground(BLACK);
+
+            DrawText("Original Signal", 10, 10, 20, RAYWHITE);
+            for (int x = 0; x < SCREEN_WIDTH; x++) {
+                DrawLine(x, 150, x, 150 + (int)(rawHistory[x] * 200), BLUE);
+            }
+
+            DrawLine(0, 300, SCREEN_WIDTH, 300, DARKGRAY);
+
+            DrawText("VAD Decision (Green = Speech)", 10, 310, 20, RAYWHITE);
+            for (int x = 0; x < SCREEN_WIDTH; x++) {
+                if (procHistory[x] > 0.1f) {
+                    DrawLine(x, 350, x, 550, GREEN);
+                }
+            }
+            DrawFPS(10, 10);
+        EndDrawing();
+    }
+}
 
 
 void log_sf_info(SF_INFO *sf_info)
@@ -405,89 +518,135 @@ int main(int argc, char **argv)
         printf("Backend error: %s\n", e.what());
     }
 
-	SNDFILE* f_sound;
-	if(argc > 1)
+
+	if(lab == 1 || lab == 2)
 	{
+		SNDFILE* f_sound;
+		if(argc > 1)
+		{
  		f_sound = sf_open(argv[1], SFM_READ, &sf_info);
 
-		if(f_sound == NULL)
+			if(f_sound == NULL)
+			{
+				perror("Error occured while opening file: ");
+				printf("%s\n", argv[1]);
+				abort();
+			}
+		}
+		else
 		{
-			perror("Error occured while opening file: ");
-			printf("%s\n", argv[1]);
+			perror("Please provide path to sound file to be analyzed!\n");
 			abort();
 		}
+
+		log_sf_info(&sf_info);
+		int total_samples = sf_info.frames * sf_info.channels;
+
+		int16_t *sound_data = (int16_t*)malloc_nc(total_samples * sizeof(int16_t));
+		int16_t *sound_data_ch0 = (int16_t*)malloc_nc(sf_info.frames * sizeof(int16_t));
+		float *sound_data_ch0_fl = (float*)malloc_nc(sf_info.frames * sizeof(float));
+		float *scratch = (float*)malloc_nc(sf_info.frames * sizeof(float));
+
+		sf_read_short(f_sound, (int16_t*)sound_data, sf_info.frames*sf_info.channels);
+
+		for(int i = 0, k = 0; i < total_samples; k++, i += sf_info.channels)
+			sound_data_ch0[k] = sound_data[i];
+
+		for(int i = 0; i < sf_info.frames; i++)
+			sound_data_ch0_fl[i] = (float)sound_data_ch0[i] / INT16_MAX;
+
+
+		int sample_rate = sf_info.samplerate;
+
+     	if (lab == 1)
+      	{
+      		int N = 0;
+       		int M = 0;
+
+         	int win_flag = 0;
+         	int use_fft = 0;
+
+         	std::cout << "Enter number of DFT points: \t";
+         	std::cin >> N;
+         	std::cout << "\n";
+         	std::cout << "Should we use FFT? Print 1 or 0: \t";
+         	std::cin >> use_fft;
+         	std::cout << "\n";
+         	std::cout << "Should we use hann window? Print 1 or 0: \t";
+         	std::cin >> win_flag;
+         	std::cout << "\n";
+
+         	printf("Number of DFT points: %d\n", N);
+         	printf("Used window: %s\n", (win_flag) ? "HANN_WINDOW" :"NO_WINDOW");
+
+         	s_signal_init(&signal, N, M, sample_rate, (win_flag) ? HANN_WINDOW : NO_WINDOW);
+         	int frames_to_process = sf_info.frames / N;
+         	for(int i = 0; i < frames_to_process; i++)
+         	{
+         		analyze_audio_1(&sound_data_ch0_fl[N*i], &signal, use_fft, i);
+         	}
+
+         	s_signal_deinit(&signal);
+       	}
+		else
+		{
+			int N = 1024; // FFT pointsя
+			int M = 40; // filters number
+			int Fs = sample_rate;
+
+			s_signal_init(&signal, N, M, sample_rate, HANN_WINDOW);
+
+			float* mel_filterbank = create_mel_filterbank(Fs, N, M);
+
+			calc_mfcc(sound_data_ch0_fl, mel_filterbank, scratch, &signal, sf_info.frames);
+
+			destroy_mel_filterbank(mel_filterbank);
+
+			s_signal_deinit(&signal);
+		}
+
+     	free_nc(scratch);
+		free_nc(sound_data_ch0_fl);
+		free_nc(sound_data_ch0);
+		free_nc(sound_data);
+
+		sf_close(f_sound);
 	}
-	else
+	else if (lab == 3)
 	{
-		perror("Please provide path to sound file to be analyzed!\n");
-		abort();
-	}
+	 	InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Real-time Audio Scroll");
+		InitAudioDevice();
 
+		Wave wave = LoadWave(argv[1]);
+		Sound sound = LoadSoundFromWave(wave);
 
-	log_sf_info(&sf_info);
-	int total_samples = sf_info.frames * sf_info.channels;
+		int currentSample = 0;
 
-	int16_t *sound_data = (int16_t*)malloc_nc(total_samples * sizeof(int16_t));
-	int16_t *sound_data_ch0 = (int16_t*)malloc_nc(sf_info.frames * sizeof(int16_t));
-	float *sound_data_ch0_fl = (float*)malloc_nc(sf_info.frames * sizeof(float));
-	float *scratch = (float*)malloc_nc(sf_info.frames * sizeof(float));
+		PlaySound(sound);
+		SetTargetFPS(25);
 
-	sf_read_short(f_sound, (int16_t*)sound_data, sf_info.frames*sf_info.channels);
+		WaveFormat(&wave, wave.sampleRate, 32, 1);
 
-	for(int i = 0, k = 0; i < total_samples; k++, i += sf_info.channels)
-		sound_data_ch0[k] = sound_data[i];
+		float *samples = (float*)malloc_nc(wave.frameCount * sizeof(float));
+		memcpy(samples, wave.data, wave.frameCount * sizeof(float));
 
-	for(int i = 0; i < sf_info.frames; i++)
-		sound_data_ch0_fl[i] = (float)sound_data_ch0[i] / INT16_MAX;
+		float *scratch = (float*)malloc_nc(wave.frameCount * sizeof(float));
 
+		int N = 1024; // FFT points
+		int M = 40; // filters number
+		int Fs = wave.sampleRate;
 
-	int sample_rate = sf_info.samplerate;
-	int N = 0;
-	int M = 0;
+		s_signal_init(&signal, N, M, Fs, HANN_WINDOW);
 
+		float* mel_filterbank = create_mel_filterbank(Fs, N, M);
 
-	if(lab == 1)
-	{
-    	int win_flag = 0;
-    	int use_fft = 0;
-
-    	std::cout << "Enter number of DFT points: \t";
-    	std::cin >> N;
-    	std::cout << "\n";
-    	std::cout << "Should we use FFT? Print 1 or 0: \t";
-    	std::cin >> use_fft;
-    	std::cout << "\n";
-    	std::cout << "Should we use hann window? Print 1 or 0: \t";
-    	std::cin >> win_flag;
-    	std::cout << "\n";
-
-    	printf("Number of DFT points: %d\n", N);
-    	printf("Used window: %s\n", (win_flag) ? "HANN_WINDOW" :"NO_WINDOW");
-
-    	s_signal_init(&signal, N, M, sample_rate, (win_flag) ? HANN_WINDOW : NO_WINDOW);
-    	int frames_to_process = sf_info.frames / N;
-    	for(int i = 0; i < frames_to_process; i++)
-    	{
-    		analyze_audio_1(&sound_data_ch0_fl[N*i], &signal, use_fft, i);
-    	}
-
-    	s_signal_deinit(&signal);
-	}
-	else if (lab == 2)
-	{
-	    N = 1024; // FFT pointsя
-	    M = 40; // filters number
-		int Fs = sample_rate;
-
-		s_signal_init(&signal, N, M, sample_rate, HANN_WINDOW);
-
-        float* mel_filterbank = create_mel_filterbank(Fs, N, M);
-
-	    calc_mfcc(sound_data_ch0_fl, mel_filterbank, scratch, &signal, sf_info.frames);
+		vad(samples, mel_filterbank, scratch, &signal, wave.frameCount / wave.channels, wave, sound, rawHistory, procHistory);
 
 		destroy_mel_filterbank(mel_filterbank);
 
 		s_signal_deinit(&signal);
+
+		free_nc(scratch);
 	}
 	else
 	{
@@ -496,12 +655,7 @@ int main(int argc, char **argv)
 		exit(-1);
 	}
 
-	free_nc(scratch);
-	free_nc(sound_data_ch0_fl);
-	free_nc(sound_data_ch0);
-	free_nc(sound_data);
 
-	sf_close(f_sound);
 
 	return 0;
 }
