@@ -12,6 +12,9 @@ This project branch implements Fast Fourier Transform (FFT), windowing functions
 ## KPI-DSP-lab 2  
 This project branch implements software for calculation and visualization the mel-frequency cepstral coefficients of an audio signal.
 
+## KPI-DSP-lab 3
+This project branch implements simple voice activity detector (VAD) based on calculated MFCC.
+
 
 ## System Requirements
 
