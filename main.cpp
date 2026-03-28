@@ -411,11 +411,22 @@ void vad(float *sound_data, float *mel_filterbank, float *scratch, s_signal *sig
     int frame_count = 0;
     float energy_prev = 0.0f;
     float energy_noise = 0.0f;
+
     const int WINDOW_SIZE = signal_str->N;
+    const int INFERENCES_SIZE = 5;
+
+    int inferences[INFERENCES_SIZE];
+    memset(inferences, 0, INFERENCES_SIZE * sizeof(int));
+
+    int infer_cnt = 0;
 
     int is_voice = 0;
     int currentSample = 0;
     float elapsedSeconds = 0.0f;
+
+    const int thresh_dB = 8.0f;
+
+    int not_voice_cnt = 0;
 
     memset(rawHistory, 0, sizeof(float) * SCREEN_WIDTH);
     memset(procHistory, 0, sizeof(float) * SCREEN_WIDTH);
@@ -445,15 +456,29 @@ void vad(float *sound_data, float *mel_filterbank, float *scratch, s_signal *sig
 
                 // --- VAD LOGIC --- //
                 float energy = mfcc[0];
-                if(frame_count < 5) {
-                    energy_noise = ema(energy_prev, energy, 0.45);
-                    energy_prev = energy_noise;
-                } else {
-                    energy = ema(energy_prev, energy, 0.85);
-                    is_voice = (energy > (energy_noise)) ? 1 : 0;
-                    energy_prev = energy;
+
+                energy = ema(energy_prev, energy, 0.5);
+                is_voice = (energy > (energy_noise + thresh_dB)) ? 1 : 0;
+                energy_prev = energy;
+
+                if(!is_voice)
+                	energy_noise = energy;
+
+                int is_noise_sequence = 1;
+                for(int i = 0; i < INFERENCES_SIZE; i++)
+                {
+                	if(inferences[i])
+                	{
+                 		is_noise_sequence = 0;
+                  		break;
+                 	}
                 }
-                frame_count++;
+
+                inferences[infer_cnt] = is_voice;
+                infer_cnt++;
+
+                if(infer_cnt == INFERENCES_SIZE)
+               		infer_cnt = 0;
 
                 // --- VISUALIZATION ---
                 memmove(rawHistory, &rawHistory[1], (SCREEN_WIDTH - 1) * sizeof(float));
@@ -463,6 +488,8 @@ void vad(float *sound_data, float *mel_filterbank, float *scratch, s_signal *sig
                 procHistory[SCREEN_WIDTH - 1] = is_voice ? 0.8f : 0.0f;
 
                 currentSample += WINDOW_SIZE;
+
+                frame_count++;
             }
         }
 
