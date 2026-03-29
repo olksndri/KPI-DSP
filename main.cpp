@@ -12,6 +12,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_main.h>
 #include "tiffio.h"
+#include "image_compression/rle.h"
 
 #include "math/complex_math.h"
 
@@ -728,7 +729,7 @@ int main(int argc, char **argv)
 		const int y_margin = 100;
 		const int x_margin = 25;
 
-		const int window_w = (img_w * 3) + x_margin * 4 + x_margin;
+		const int window_w = (img_w * 2) + x_margin * 4 + x_margin;
 		const int window_h = (img_h) + y_margin * 2;
 
 		SDL_Window* window = NULL;
@@ -765,6 +766,28 @@ int main(int argc, char **argv)
 				window_buff[out_idx] = image[inp_idx];
 			}
 		}
+
+		int orig_img_size = img_h * img_h * 4;
+		RLE_IMAGE rle_image_st;
+		uint32_t* decompressed_image = (uint32_t* )malloc_nc(img_h * img_w * sizeof(uint32_t));
+
+		rle_compress(image, rle_image_st, img_w, img_h);
+
+		rle_decompress(decompressed_image, rle_image_st);
+
+		printf("original image size: %d bytes\n", orig_img_size);
+		printf("compessed image size: %d bytes\n", rle_image_st.data_size * sizeof(RLE_PX));
+
+		for(int y = 0; y < img_h; y++)
+		{
+			for(int x = 0; x < img_w; x++)
+			{
+				int inp_idx = (y * img_w) + x;
+				int out_idx = ((y + y_margin) * window_w) + x + 2 * x_margin + img_w;
+				window_buff[out_idx] = decompressed_image[inp_idx];
+			}
+		}
+
 
 	    // Main loop flag
 	    int quit = 0;
