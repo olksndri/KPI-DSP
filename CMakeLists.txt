@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(raylib REQUIRED)
 find_package(SDL2 REQUIRED)
 find_package(PkgConfig REQUIRED)
+find_package(TIFF REQUIRED)
 pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
 
 set(Python3_EXECUTABLE "${CMAKE_SOURCE_DIR}/.venv/bin/python")
@@ -35,6 +36,7 @@ target_include_directories(dsp_lab PUBLIC
 
 target_link_libraries(dsp_lab PRIVATE
     raylib
+    TIFF::TIFF
     SDL2::SDL2
     SDL2::SDL2main
     PkgConfig::SNDFILE

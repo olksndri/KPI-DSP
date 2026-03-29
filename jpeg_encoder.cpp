@@ -1,0 +1,6 @@
+
+void jpeg_encode()
+{
+
+
+}
