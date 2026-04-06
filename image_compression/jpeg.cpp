@@ -281,7 +281,7 @@ void apply_zigzag(int16_t *out_vector, int16_t *in_8x8_block) {
 void deapply_zigzag(int16_t *out_8x8_block, int16_t *inp_vector)
 {
 	for (int i = 0; i < 64; i++) {
-		out_8x8_block[i] = inp_vector[zig_zag_map[i]];
+		out_8x8_block[zig_zag_map[i]] = inp_vector[i];
 	}
 }
 
@@ -410,6 +410,7 @@ void jpeg_process_channel_forward(int16_t *out, float *color, int block_h, int b
 
 	const uint8_t *q_table = (ch_type == JPEG_CH_TYPE::LUMINANCE) ? std_lum_quant :  std_chrom_quant;
 
+	int16_t *p_temp_out = out;
 	for(int y = 0; y < h; y += block_h)
 	{
 		for(int x = 0; x < w; x += block_w)
@@ -433,7 +434,10 @@ void jpeg_process_channel_forward(int16_t *out, float *color, int block_h, int b
 
 			// Apply zigzag scanning to reorder data such way
 			// that end of array will be filled with sequence of zeros
-			apply_zigzag(&out[y * w + x], block_quantized.data());
+			// apply_zigzag(&out[y * w + x], block_quantized.data());
+			apply_zigzag(p_temp_out, block_quantized.data());
+			p_temp_out+=64;
+
 		}
 	}
 
@@ -448,6 +452,7 @@ void jpeg_process_channel_backward(float *color, int16_t *compressed_in, int blo
 	std::vector<int16_t> block_quantized(block_h * block_w);
 
 	const uint8_t *q_table = (ch_type == JPEG_CH_TYPE::LUMINANCE) ? std_lum_quant :  std_chrom_quant;
+	int16_t *p_temp_in = compressed_in;
 
 	for(int y = 0; y < h; y += block_h)
 	{
@@ -455,8 +460,9 @@ void jpeg_process_channel_backward(float *color, int16_t *compressed_in, int blo
 		{
 			// Apply zigzag scanning to reorder data such way
 			// that end of array will be filled with sequence of zeros
-			deapply_zigzag(block_quantized.data(), compressed_in);
-
+			// deapply_zigzag(block_quantized.data(), compressed_in);
+			deapply_zigzag(block_quantized.data(), p_temp_in);
+			p_temp_in+=64 ;
 			// Apply quantization to the frequency coefficient whith such a table
 			// that will result into a zeroing all high-freq components, generating
 			// a large number of "0"
