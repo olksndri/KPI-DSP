@@ -1,5 +1,0 @@
-
-void jpeg_decode()
-{
-
-}

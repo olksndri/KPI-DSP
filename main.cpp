@@ -13,6 +13,7 @@
 #include <SDL2/SDL_main.h>
 #include "tiffio.h"
 #include "image_compression/rle.h"
+#include "image_compression/jpeg.h"
 
 #include "math/complex_math.h"
 
@@ -767,16 +768,43 @@ int main(int argc, char **argv)
 			}
 		}
 
-		int orig_img_size = img_h * img_h * 4;
-		RLE_IMAGE rle_image_st;
+		int orig_img_size = img_h * img_w * 4;
+		// RLE_IMAGE rle_image_st;
 		uint32_t* decompressed_image = (uint32_t* )malloc_nc(img_h * img_w * sizeof(uint32_t));
+		uint8_t* RGB_in = (uint8_t* )malloc_nc(img_h * img_w * 3 * sizeof(uint8_t));
+		uint8_t* RGB_out = (uint8_t* )malloc_nc(img_h * img_w * 3 * sizeof(uint8_t));
+		// rle_compress(image, rle_image_st, img_w, img_h);
+		// rle_decompress(decompressed_image, rle_image_st);
 
-		rle_compress(image, rle_image_st, img_w, img_h);
+		for(int i = 0; i < img_h * img_w; i++)
+		{
+			uint32_t v = image[i];
+			uint8_t r = v >> 24;
+			uint8_t g = v >> 16;
+			uint8_t b = v >> 8;
+			RGB_in[i*3+0] = r;
+			RGB_in[i*3+1] = g;
+			RGB_in[i*3+2] = b;
+		}
 
-		rle_decompress(decompressed_image, rle_image_st);
+
+
+		PADDING pad_luminance;
+		PADDING pad_chroma;
+		// std::vector<int16_t> Y_zg(img_h * img_w  * 3 * 10);
+		// std::vector<int16_t> Cb_zg(img_h * img_w * 3 * 10);
+		// std::vector<int16_t> Cr_zg(img_h * img_w * 3 * 10);
+		std::vector<int16_t> Y_zg;
+		std::vector<int16_t> Cb_zg;
+		std::vector<int16_t> Cr_zg;
+		jpeg_encode(Y_zg, Cb_zg, Cr_zg, pad_luminance, pad_chroma, RGB_in, img_h, img_w);
+
+		jpeg_decode(RGB_out, Y_zg, Cb_zg, Cr_zg, pad_luminance, pad_chroma, img_h, img_w);
+
+
 
 		printf("original image size: %d bytes\n", orig_img_size);
-		printf("compessed image size: %d bytes\n", rle_image_st.data_size * sizeof(RLE_PX));
+		// printf("compessed image size: %d bytes\n", rle_image_st.data_size * sizeof(RLE_PX));
 
 		for(int y = 0; y < img_h; y++)
 		{
