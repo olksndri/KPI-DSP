@@ -779,9 +779,9 @@ int main(int argc, char **argv)
 		for(int i = 0; i < img_h * img_w; i++)
 		{
 			uint32_t v = image[i];
-			uint8_t r = v >> 24;
-			uint8_t g = v >> 16;
-			uint8_t b = v >> 8;
+			uint8_t r = v >> 16;
+			uint8_t g = v >> 8;
+			uint8_t b = v >> 0;
 			RGB_in[i*3+0] = r;
 			RGB_in[i*3+1] = g;
 			RGB_in[i*3+2] = b;
@@ -801,7 +801,24 @@ int main(int argc, char **argv)
 
 		jpeg_decode(RGB_out, Y_zg, Cb_zg, Cr_zg, pad_luminance, pad_chroma, img_h, img_w);
 
+		for(int i = 0; i < img_h * img_w; i++)
+		{
+			uint8_t r = RGB_out[i*3+0];
+			uint8_t g = RGB_out[i*3+1];
+			uint8_t b = RGB_out[i*3+2];
+			uint32_t rgba = (255 << 24) | (r << 16) | (g << 8) | (b << 0);
+			decompressed_image[i]  = rgba ;
+		}
 
+		// for(int i = 0; i < img_h * img_w; i++)
+		// {
+		// 	uint32_t v = image[i];
+		// 	uint8_t r = v >> 16;
+		// 	uint8_t g = v >> 8;
+		// 	uint8_t b = v >> 0;
+		// 	uint32_t rgba = (255 << 24) | (r << 16) | (g << 8) | (b << 0);
+		// 	decompressed_image[i]  = rgba ;
+		// }
 
 		printf("original image size: %d bytes\n", orig_img_size);
 		// printf("compessed image size: %d bytes\n", rle_image_st.data_size * sizeof(RLE_PX));

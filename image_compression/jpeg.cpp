@@ -481,34 +481,47 @@ void jpeg_process_channel_backward(float *color, int16_t *compressed_in, int blo
 void jpeg_encode(std::vector<int16_t> &Y_zg, std::vector<int16_t> &Cb_zg, std::vector<int16_t> &Cr_zg,
 	PADDING &pad_luminance, PADDING &pad_chroma, uint8_t *RGB, int h, int w)
 {
+	printf("here1"); fflush(stdout);
 	std::vector<uint8_t> YCbCr(h * w * 3);
+	printf("here2"); fflush(stdout);
 
 	// The image is converted from RGB to YCbCr
 	RGB_to_YCbCr(YCbCr.data(), RGB, h, w);
+	printf("here3"); fflush(stdout);
+
 
 	// Split YCbCr image into three separate images
 	std::vector<uint8_t> Y(h * w);
 	std::vector<uint8_t> Cb(h * w);
 	std::vector<uint8_t> Cr(h * w);
 	split_YCbCr(Y.data(), Cb.data(), Cr.data(), YCbCr.data(), h, w);
+	printf("here3"); fflush(stdout);
 
 
 	// Chroma channels could be downsampled, resulting into 2 times lesser height and width
-	int h_ds = h / 2;
-	int w_ds = w / 2;
+	// int h_ds = h / 2;
+	// int w_ds = w / 2;
+	int h_ds = (h + 1) / 2; // для 513 це дасть 257
+int w_ds = (w + 1) / 2;
 	std::vector<uint8_t> Cb_ds(h_ds * w_ds);
 	std::vector<uint8_t> Cr_ds(h_ds * w_ds);
 	downsample_chroma_4_2_0(Cb_ds.data(), Cb.data(), h, w, h_ds, w_ds);
 	downsample_chroma_4_2_0(Cr_ds.data(), Cr.data(), h, w, h_ds, w_ds);
+
 
 	// Pad images to have a multiple of 8 size
 	int mulof8_h = (h + 7) & -8;
 	int mulof8_w = (w + 7) & -8;
 	int mulof8_hds = (h_ds + 7) & -8;
 	int mulof8_wds = (w_ds + 7) & -8;
+	printf("\n\n %d %d %d %d \n\n", mulof8_h, mulof8_w, mulof8_hds, mulof8_wds);
+
 	std::vector<uint8_t> Y_padded(mulof8_h * mulof8_w);
 	std::vector<uint8_t> Cb_padded(mulof8_hds * mulof8_wds);
 	std::vector<uint8_t> Cr_padded(mulof8_hds * mulof8_wds);
+
+	printf("here4"); fflush(stdout);
+
 	if((mulof8_h != h) || (mulof8_w != w))
 	{
 		uint32_t padr = mulof8_w - w;
@@ -572,8 +585,10 @@ void jpeg_decode(uint8_t *RGB, std::vector<int16_t> &Y_zg, std::vector<int16_t> 
 	PADDING &pad_luminance, PADDING &pad_chroma, int h, int w)
 {
 	// Start restoring image by concatenating blocks back to image channels
-	int h_ds = h / 2;
-	int w_ds = w / 2;
+	// int h_ds = h / 2;
+	// int w_ds = w / 2;
+	int h_ds = (h + 1) / 2; // для 513 це дасть 257
+int w_ds = (w + 1) / 2;
 
 	// Pad images to have a multiple of 8 size
 	int mulof8_h = (h + 7) & -8;
