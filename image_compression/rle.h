@@ -2,6 +2,7 @@
 #include "stdlib.h"
 #include "stdio.h"
 #include "string.h"
+#include <vector>
 
 
 typedef struct RLE_PX
@@ -17,6 +18,7 @@ typedef struct RLE_IMAGE
 	uint32_t orig_w;
 	uint32_t orig_h;
 }RLE_IMAGE;
+
 
 void rle_compress(uint32_t *inp, RLE_IMAGE &st, int w, int h);
 

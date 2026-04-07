@@ -34,8 +34,16 @@ typedef enum JPEG_CH_TYPE
 	CHROMA,
 }JPEG_CH_TYPE;
 
-void jpeg_encode(std::vector<int16_t> &Y_zg, std::vector<int16_t> &Cb_zg, std::vector<int16_t> &Cr_zg,
+typedef struct RLE_IMAGE_1CH_EOB
+{
+	std::vector<int16_t>data;
+	std::vector <int8_t>EOB; //last non-zero element index
+}RLE_IMAGE_1CH_EOB;
+
+
+
+void jpeg_encode(RLE_IMAGE_1CH_EOB &Y_rle, RLE_IMAGE_1CH_EOB &Cb_rle, RLE_IMAGE_1CH_EOB &Cr_rle,
 	PADDING &pad_luminance, PADDING &pad_chroma, uint8_t *RGB, int h, int w);
 
-void jpeg_decode(uint8_t *RGB, std::vector<int16_t> &Y_zg, std::vector<int16_t> &Cb_zg, std::vector<int16_t> &Cr_zg,
+void jpeg_decode(uint8_t *RGB, RLE_IMAGE_1CH_EOB &Y_rle, RLE_IMAGE_1CH_EOB &Cb_rle, RLE_IMAGE_1CH_EOB &Cr_rle,
 	PADDING &pad_luminance, PADDING &pad_chroma, int h, int w);

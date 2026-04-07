@@ -794,12 +794,12 @@ int main(int argc, char **argv)
 		// std::vector<int16_t> Y_zg(img_h * img_w  * 3 * 10);
 		// std::vector<int16_t> Cb_zg(img_h * img_w * 3 * 10);
 		// std::vector<int16_t> Cr_zg(img_h * img_w * 3 * 10);
-		std::vector<int16_t> Y_zg;
-		std::vector<int16_t> Cb_zg;
-		std::vector<int16_t> Cr_zg;
-		jpeg_encode(Y_zg, Cb_zg, Cr_zg, pad_luminance, pad_chroma, RGB_in, img_h, img_w);
+		RLE_IMAGE_1CH_EOB Y_rle;
+		RLE_IMAGE_1CH_EOB Cb_rle;
+		RLE_IMAGE_1CH_EOB Cr_rle;
+		jpeg_encode(Y_rle, Cb_rle, Cr_rle, pad_luminance, pad_chroma, RGB_in, img_h, img_w);
 
-		jpeg_decode(RGB_out, Y_zg, Cb_zg, Cr_zg, pad_luminance, pad_chroma, img_h, img_w);
+		jpeg_decode(RGB_out, Y_rle, Cb_rle, Cr_rle, pad_luminance, pad_chroma, img_h, img_w);
 
 		for(int i = 0; i < img_h * img_w; i++)
 		{
@@ -819,9 +819,19 @@ int main(int argc, char **argv)
 		// 	uint32_t rgba = (255 << 24) | (r << 16) | (g << 8) | (b << 0);
 		// 	decompressed_image[i]  = rgba ;
 		// }
-
+		int compressed_img_data_size_bytes
+			=	(Y_rle.data.size() * sizeof(int16_t)) +
+				(Cb_rle.data.size() * sizeof(int16_t)) +
+				(Cr_rle.data.size() * sizeof(int16_t));
+		int compressed_img_metadata_size_bytes
+			= 	(Y_rle.EOB.size() + sizeof(uint8_t)) +
+				(Cb_rle.EOB.size() + sizeof(uint8_t)) +
+				(Cr_rle.EOB.size() + sizeof(uint8_t)) +
+				sizeof(pad_luminance) + sizeof(pad_chroma) +
+				sizeof(img_h) + sizeof(img_w);
+		int compressed_img_size = compressed_img_data_size_bytes + compressed_img_metadata_size_bytes;
 		printf("original image size: %d bytes\n", orig_img_size);
-		// printf("compessed image size: %d bytes\n", rle_image_st.data_size * sizeof(RLE_PX));
+		printf("compessed image size: %d bytes\n", compressed_img_size);
 
 		for(int y = 0; y < img_h; y++)
 		{

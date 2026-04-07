@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <vector>
 
 void RGBA_to_YCbCr(uint8_t *YCbCr, uint8_t *A, uint8_t *RGBA, int h, int w)
@@ -481,19 +482,102 @@ void jpeg_process_channel_backward(float *color, int16_t *compressed_in, int blo
 					color[(y + by) * w + x + bx] = p_block[by * block_w + bx];
 		}
 	}
-
 }
 
-void jpeg_encode(std::vector<int16_t> &Y_zg, std::vector<int16_t> &Cb_zg, std::vector<int16_t> &Cr_zg,
+
+
+void rle_compress_eob(RLE_IMAGE_1CH_EOB &out, int16_t *inp, int block_h, int block_w, int h, int w)
+{
+	int block_size = block_h * block_w;
+	int blocks_count = (h * w) / block_size;
+
+	for(int i = 0; i < blocks_count; i++)
+	{
+		int start_idx = ((i + 1) * block_size) - 1;
+		int end_idx = i * block_size;
+
+		int eob_pushed = 0;
+		int eob_cnt = block_size - 1;
+		for(int b = start_idx; b >= end_idx; b--)
+		{
+			if(inp[b] != 0)
+			{
+				int eob = eob_cnt;
+				out.EOB.push_back(eob);
+				for(int nz = 0; nz <= eob; nz++)
+				{
+					out.data.push_back(inp[i * block_size + nz]);
+				}
+				eob_pushed = 1;
+				break;
+			}
+
+			eob_cnt--;
+		}
+
+		// special value to specify that all the block contains zeros at end
+		if(!eob_pushed)
+		{
+			out.EOB.push_back(-1);
+		}
+	}
+}
+
+
+void rle_decompress_eob(int16_t *out, RLE_IMAGE_1CH_EOB &inp, int block_h, int block_w, int h, int w)
+{
+	int block_size = block_h * block_w;
+	int blocks_count = (h * w) / block_size;
+	int cur_inp_block_idx = 0;
+	for(int i = 0; i < blocks_count; i++)
+	{
+		int cur_eob = inp.EOB[i];
+
+		int cur_out_block_idx = i * block_size;
+		if(cur_eob == -1)
+		{
+			memset(&out[cur_out_block_idx], 0x0, block_size * sizeof(int16_t));
+		}
+		else if(cur_eob == block_size - 1)
+		{
+			memcpy(&out[cur_out_block_idx], &inp.data[cur_inp_block_idx], block_size * sizeof(int16_t));
+		}
+		else // block contains zero (s) at the end and non-zeros at the begin
+		{
+			int non_zero_elements = (cur_eob + 1);
+			int zero_elements = block_size - non_zero_elements;
+			memcpy(&out[cur_out_block_idx], &inp.data[cur_inp_block_idx], non_zero_elements * sizeof(int16_t));
+			memset(&out[cur_out_block_idx + non_zero_elements], 0x0, zero_elements * sizeof(int16_t));
+		}
+
+		// if cur_eob == -1 will be incremented by zero because 0 elements are non-zero
+		// for current block
+		cur_inp_block_idx += cur_eob+1;
+	}
+}
+
+void print_img_numbers(const char *fname, int16_t *t, int h, int w)
+{
+	FILE *fp = fopen(fname, "w");
+	for(int y = 0; y < h; y++)
+	{
+		fprintf(fp, "\n");
+		for(int x = 0; x < w; x++)
+		{
+			fprintf(fp, "%d ", t[y*w+x]);
+		}
+	}
+	fflush(fp);
+	fclose(fp);
+}
+
+void jpeg_encode(RLE_IMAGE_1CH_EOB &Y_rle, RLE_IMAGE_1CH_EOB &Cb_rle, RLE_IMAGE_1CH_EOB &Cr_rle,
 	PADDING &pad_luminance, PADDING &pad_chroma, uint8_t *RGB, int h, int w)
 {
-	printf("here1"); fflush(stdout);
 	std::vector<uint8_t> YCbCr(h * w * 3);
-	printf("here2"); fflush(stdout);
 
 	// The image is converted from RGB to YCbCr
 	RGB_to_YCbCr(YCbCr.data(), RGB, h, w);
-	printf("here3"); fflush(stdout);
 
 
 	// Split YCbCr image into three separate images
@@ -501,14 +585,13 @@ void jpeg_encode(std::vector<int16_t> &Y_zg, std::vector<int16_t> &Cb_zg, std::v
 	std::vector<uint8_t> Cb(h * w);
 	std::vector<uint8_t> Cr(h * w);
 	split_YCbCr(Y.data(), Cb.data(), Cr.data(), YCbCr.data(), h, w);
-	printf("here3"); fflush(stdout);
 
 
 	// Chroma channels could be downsampled, resulting into 2 times lesser height and width
 	// int h_ds = h / 2;
 	// int w_ds = w / 2;
 	int h_ds = (h + 1) / 2; // для 513 це дасть 257
-int w_ds = (w + 1) / 2;
+	int w_ds = (w + 1) / 2;
 	std::vector<uint8_t> Cb_ds(h_ds * w_ds);
 	std::vector<uint8_t> Cr_ds(h_ds * w_ds);
 	downsample_chroma_4_2_0(Cb_ds.data(), Cb.data(), h, w, h_ds, w_ds);
@@ -520,13 +603,10 @@ int w_ds = (w + 1) / 2;
 	int mulof8_w = (w + 7) & -8;
 	int mulof8_hds = (h_ds + 7) & -8;
 	int mulof8_wds = (w_ds + 7) & -8;
-	printf("\n\n %d %d %d %d \n\n", mulof8_h, mulof8_w, mulof8_hds, mulof8_wds);
 
 	std::vector<uint8_t> Y_padded(mulof8_h * mulof8_w);
 	std::vector<uint8_t> Cb_padded(mulof8_hds * mulof8_wds);
 	std::vector<uint8_t> Cr_padded(mulof8_hds * mulof8_wds);
-
-	printf("here4"); fflush(stdout);
 
 	if((mulof8_h != h) || (mulof8_w != w))
 	{
@@ -574,27 +654,37 @@ int w_ds = (w + 1) / 2;
 	// Break image channels into 8x8 blocks and process each block separately.
 	int block_h = 8;
 	int block_w = 8;
-	Y_zg.resize(Y_padded.size());
-	Cb_zg.resize(Cb_padded.size());
-	Cr_zg.resize(Cr_padded.size());
+ 	std::vector<int16_t> Y_zg(Y_padded.size());
+ 	std::vector<int16_t> Cb_zg(Cb_padded.size());
+ 	std::vector<int16_t> Cr_zg(Cr_padded.size());
 	jpeg_process_channel_forward(Y_zg.data(), Y_pad_fl.data(), block_h, block_w, mulof8_h, mulof8_w, JPEG_CH_TYPE::LUMINANCE);
 	jpeg_process_channel_forward(Cb_zg.data(), Cb_pad_fl.data(), block_h, block_w, mulof8_hds, mulof8_wds, JPEG_CH_TYPE::CHROMA);
 	jpeg_process_channel_forward(Cr_zg.data(), Cr_pad_fl.data(), block_h, block_w, mulof8_hds, mulof8_wds, JPEG_CH_TYPE::CHROMA);
 
+	rle_compress_eob(Y_rle, Y_zg.data(), block_h, block_w, mulof8_h, mulof8_w);
+	rle_compress_eob(Cb_rle, Cb_zg.data(), block_h, block_w, mulof8_hds, mulof8_wds);
+	rle_compress_eob(Cr_rle, Cr_zg.data(), block_h, block_w, mulof8_hds, mulof8_wds);
+
+	// RLE_encode;
+
+	// print_img_numbers("Y.txt", Y_zg.data(), mulof8_h, mulof8_w);
+	// print_img_numbers("Cb.txt", Cb_zg.data(), mulof8_hds, mulof8_wds);
+	// print_img_numbers("Cr.txt", Cr_zg.data(), mulof8_hds, mulof8_wds);
+
 	// int8_to_float(Y_pad_fl.data(), Y_pad_int8.data(), Y_pad_int8.size());
 	// int8_to_float(Cb_pad_fl.data(), Cb_pad_int8.data(), Cb_pad_int8.size());
 	// int8_to_float(Cr_pad_fl.data(), Cr_pad_int8.data(), Cr_pad_int8.size());
-
 }
 
-void jpeg_decode(uint8_t *RGB, std::vector<int16_t> &Y_zg, std::vector<int16_t> &Cb_zg, std::vector<int16_t> &Cr_zg,
+void jpeg_decode(uint8_t *RGB, RLE_IMAGE_1CH_EOB &Y_rle, RLE_IMAGE_1CH_EOB &Cb_rle, RLE_IMAGE_1CH_EOB &Cr_rle,
 	PADDING &pad_luminance, PADDING &pad_chroma, int h, int w)
 {
+
 	// Start restoring image by concatenating blocks back to image channels
 	// int h_ds = h / 2;
 	// int w_ds = w / 2;
 	int h_ds = (h + 1) / 2; // для 513 це дасть 257
-int w_ds = (w + 1) / 2;
+	int w_ds = (w + 1) / 2;
 
 	// Pad images to have a multiple of 8 size
 	int mulof8_h = (h + 7) & -8;
@@ -608,6 +698,15 @@ int w_ds = (w + 1) / 2;
 
 	int block_h = 8;
 	int block_w = 8;
+
+	std::vector<int16_t> Y_zg(mulof8_h * mulof8_w);
+	std::vector<int16_t> Cb_zg(mulof8_hds * mulof8_wds);
+	std::vector<int16_t> Cr_zg(mulof8_hds * mulof8_wds);
+
+	rle_decompress_eob(Y_zg.data(), Y_rle, block_h, block_w, mulof8_h, mulof8_w);
+	rle_decompress_eob(Cb_zg.data(), Cb_rle, block_h, block_w, mulof8_hds, mulof8_wds);
+	rle_decompress_eob(Cr_zg.data(), Cr_rle, block_h, block_w, mulof8_hds, mulof8_wds);
+
 	std::vector<float> Y_pad_fl(Y_zg.size());
 	std::vector<float> Cb_pad_fl(Cb_zg.size());
 	std::vector<float> Cr_pad_fl(Cr_zg.size());
