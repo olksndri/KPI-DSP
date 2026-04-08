@@ -787,19 +787,15 @@ int main(int argc, char **argv)
 			RGB_in[i*3+2] = b;
 		}
 
-
-
 		PADDING pad_luminance;
 		PADDING pad_chroma;
-		// std::vector<int16_t> Y_zg(img_h * img_w  * 3 * 10);
-		// std::vector<int16_t> Cb_zg(img_h * img_w * 3 * 10);
-		// std::vector<int16_t> Cr_zg(img_h * img_w * 3 * 10);
+
 		RLE_IMAGE_1CH_EOB Y_rle;
 		RLE_IMAGE_1CH_EOB Cb_rle;
 		RLE_IMAGE_1CH_EOB Cr_rle;
-		jpeg_encode(Y_rle, Cb_rle, Cr_rle, pad_luminance, pad_chroma, RGB_in, img_h, img_w);
-
-		jpeg_decode(RGB_out, Y_rle, Cb_rle, Cr_rle, pad_luminance, pad_chroma, img_h, img_w);
+		int use_chroma_downsampling = 1;
+		jpeg_encode(Y_rle, Cb_rle, Cr_rle, pad_luminance, pad_chroma, RGB_in, img_h, img_w, use_chroma_downsampling);
+		jpeg_decode(RGB_out, Y_rle, Cb_rle, Cr_rle, pad_luminance, pad_chroma, img_h, img_w, use_chroma_downsampling);
 
 		for(int i = 0; i < img_h * img_w; i++)
 		{
@@ -810,15 +806,6 @@ int main(int argc, char **argv)
 			decompressed_image[i]  = rgba ;
 		}
 
-		// for(int i = 0; i < img_h * img_w; i++)
-		// {
-		// 	uint32_t v = image[i];
-		// 	uint8_t r = v >> 16;
-		// 	uint8_t g = v >> 8;
-		// 	uint8_t b = v >> 0;
-		// 	uint32_t rgba = (255 << 24) | (r << 16) | (g << 8) | (b << 0);
-		// 	decompressed_image[i]  = rgba ;
-		// }
 		int compressed_img_data_size_bytes
 			=	(Y_rle.data.size() * sizeof(int16_t)) +
 				(Cb_rle.data.size() * sizeof(int16_t)) +
@@ -829,7 +816,9 @@ int main(int argc, char **argv)
 				(Cr_rle.EOB.size() + sizeof(uint8_t)) +
 				sizeof(pad_luminance) + sizeof(pad_chroma) +
 				sizeof(img_h) + sizeof(img_w);
+
 		int compressed_img_size = compressed_img_data_size_bytes + compressed_img_metadata_size_bytes;
+
 		printf("original image size: %d bytes\n", orig_img_size);
 		printf("compessed image size: %d bytes\n", compressed_img_size);
 
@@ -842,7 +831,6 @@ int main(int argc, char **argv)
 				window_buff[out_idx] = decompressed_image[inp_idx];
 			}
 		}
-
 
 	    // Main loop flag
 	    int quit = 0;

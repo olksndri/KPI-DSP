@@ -43,7 +43,7 @@ typedef struct RLE_IMAGE_1CH_EOB
 
 
 void jpeg_encode(RLE_IMAGE_1CH_EOB &Y_rle, RLE_IMAGE_1CH_EOB &Cb_rle, RLE_IMAGE_1CH_EOB &Cr_rle,
-	PADDING &pad_luminance, PADDING &pad_chroma, uint8_t *RGB, int h, int w);
+	PADDING &pad_luminance, PADDING &pad_chroma, uint8_t *RGB, int h, int w,  int use_chroma_downsampling);
 
 void jpeg_decode(uint8_t *RGB, RLE_IMAGE_1CH_EOB &Y_rle, RLE_IMAGE_1CH_EOB &Cb_rle, RLE_IMAGE_1CH_EOB &Cr_rle,
-	PADDING &pad_luminance, PADDING &pad_chroma, int h, int w);
+	PADDING &pad_luminance, PADDING &pad_chroma, int h, int w,  int use_chroma_downsampling);
