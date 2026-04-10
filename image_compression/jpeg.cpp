@@ -60,20 +60,27 @@ void YCbCr_to_RGBA(uint8_t *RGBA, uint8_t *YCbCr, uint8_t *A, int h, int w)
 
 static inline uint8_t clamp_fl_to_uint8(float v)
 {
-	if(v < 0.0f)
-	{
-		return 0;
-	}
-	else if (v > UINT8_MAX)
-	{
-		return UINT8_MAX;
-	}
-	else
-	{
-		return v;
-	}
-}
+	// if(v < 0.0f)
+	// {
+	// 	return 0;
+	// }
+	// else if (v > UINT8_MAX)
+	// {
+	// 	return UINT8_MAX;
+	// }
+	// else
+	// {
+	// 	return v;
+	// }
 
+ int i = (int)roundf(v); // або (int)(v + 0.5f)
+    if (i < 0) return 0;
+    if (i > 255) return 255;
+    return (uint8_t)i;
+}
+// static inline uint8_t clamp_fl_to_uint8(float v) {
+
+// }
 
 void RGB_to_YCbCr(uint8_t *YCbCr, uint8_t *RGB, int h, int w)
 {
@@ -234,11 +241,11 @@ void int8_to_float(float *out, int8_t *inp, int len)
 void float_to_int8(int8_t *out, float *inp, int len)
 {
 	for(int i = 0; i < len; i++)
-		out[i] = clamp_fl_to_uint8(roundf(inp[i]));
+		out[i] = roundf(inp[i]);
 }
 
 
-// Matrix for Y (Luminance)
+// // Matrix for Y (Luminance)
 const uint8_t std_lum_quant[64] = {
     16, 11, 10, 16, 24, 40, 51, 61,
     12, 12, 14, 19, 26, 58, 60, 55,
@@ -250,7 +257,7 @@ const uint8_t std_lum_quant[64] = {
     72, 92, 95, 98, 112, 100, 103, 99
 };
 
-// Matrix for Cb, Cr (Chrominance)
+// // Matrix for Cb, Cr (Chrominance)
 const uint8_t std_chrom_quant[64] = {
     17, 18, 24, 47, 99, 99, 99, 99,
     18, 21, 26, 66, 99, 99, 99, 99,
